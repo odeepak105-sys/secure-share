@@ -1,346 +1,89 @@
-
-2. Key Setup (setup_keys.sh)
-
-
 #!/bin/bash
 # This tells the system to run the script using bash shell
 
-# setup_keys.sh - One-time key setup for secure file sharing
-# This script is used once to create keys
+# setup_keys.sh - This script creates SSH keys and age keys for security
 
 set -e  
 # If any error happens, the script will stop immediately
 
 echo "=== Secure File Sharing Tool - Key Setup ==="
-# Print heading on the screen
+# This prints a heading on the screen
 
-# Create directories
-mkdir -p ~/.ssh ~/.config/age
-# Create folders if they do not exist
-# .ssh → for SSH keys
-# age → for encryption keys
+# 1. Generate SSH key pair (ed25519) if not exists
+# Check if SSH key already exists or not
 
-# 1. Generate SSH key (ed25519 - preferred)
-echo "Generating SSH ed25519 key pair..."
-# Show message
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+# If the SSH key file does NOT exist
 
-ssh-keygen -t ed25519 -C "secure-share-$(whoami)-$(date +%Y%m%d)" -f ~/.ssh/id_ed25519_secure -N ""
-# Create SSH key
-# -t ed25519 → strong key type
-# -C → add username and date as comment
-# -f → file name to save key
-# -N "" → no password (empty)
+    echo "Generating new SSH key (ed25519)..."
+    # Print message
 
-echo "SSH Public key (share this with team for SSH access):"
-# Show message
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+    # Create a new SSH key
+    # -t ed25519 → type of key
+    # -f → file location
+    # -N "" → no password (empty)
 
-cat ~/.ssh/id_ed25519_secure.pub
-# Display public key (this can be shared safely)
+else
+    echo "SSH key already exists at ~/.ssh/id_ed25519"
+    # If key already exists, print message
+fi
+
+# 2. Generate age key pair for file encryption
+# This creates age key for encrypting files
+
+if [ ! -f ~/.age_key ]; then
+# If age key file does NOT exist
+
+    echo "Generating age key pair..."
+    # Print message
+
+    age-keygen -o ~/.age_key
+    # Generate age key and save it in file
+
+else
+    echo "Age key already exists at ~/.age_key"
+    # If already exists, print message
+fi
+
+# 3. Show public keys for sharing
+# Now show public keys (these can be shared)
 
 echo ""
 # Print empty line
 
-# 2. Generate age key pair
-echo "Generating age key pair..."
-# Show message
-
-age-keygen -o ~/.config/age/identity.txt
-# Create age key and save it in file
-
-echo "=== Setup Complete ==="
-# Show completion message
-
-echo "IMPORTANT:"
-# Show warning heading
-
-echo "• Your age PUBLIC key is printed above. Share ONLY this with senders."
-# Tell user to share only public key
-
-echo "• NEVER share your private SSH key or age identity file."
-# Warning: do not share private keys
-
-echo "• Keep ~/.ssh/id_ed25519_secure and ~/.config/age/identity.txt private and backed up securely."
-# Keep keys safe and take backup
-
-
-3 Sender Script (send.sh)
-
-
-
-#!/bin/bash
-# This tells the system to run the script using bash
-
-# send.sh - Encrypt and securely transfer file to recipient
-# This script encrypts a file and sends it to another user
-
-set -euo pipefail
-# Stop the script if:
-# - any error occurs (-e)
-# - any variable is not defined (-u)
-# - any command in a pipe fails (pipefail)
-
-LOGFILE="transfer.log"
-# Name of the log file where details will be stored
-
-TIMESTAMP=$(date --iso-8601=seconds)
-# Store current date and time
-
-usage() {
-    echo "Usage: ./send.sh <file> <recipient-age-pubkey> <recipient-ssh-user@host>"
-    # Shows how to use the script
-
-    echo "Example: ./send.sh notes.txt age1abc... bob@192.168.1.100"
-    # Shows an example
-
-    exit 1
-    # Exit if used incorrectly
-}
-
-if [ $# -ne 3 ]; then
-# Check if exactly 3 arguments are given
-
-    usage
-    # If not, show usage message
-fi
-
-FILE="$1"
-# First argument: file name
-
-RECIPIENT_PUBKEY="$2"
-# Second argument: recipient's public key
-
-RECIPIENT_SSH="$3"
-# Third argument: recipient SSH address (user@host)
-
-ENCRYPTED="${FILE}.age"
-# Create name for encrypted file
-
-# Checks
-if [ ! -f "$FILE" ]; then
-# Check if the file exists
-
-    echo "ERROR: File '$FILE' not found!" >&2
-    # Show error message
-
-    exit 1
-    # Stop the script
-fi
-
-if [[ "$FILE" == *.age ]]; then
-# Check if the file is already encrypted
-
-    echo "ERROR: Do not encrypt already encrypted files!" >&2
-    # Show error message
-
-    exit 1
-    # Stop the script
-fi
-
-echo "=== Secure File Sharing - Sender ==="
+echo "=== Your Public Keys (share these with others) ==="
 # Print heading
 
-echo "File: $FILE"
-# Show file name
+echo "SSH public key (for login):"
+# Label for SSH public key
 
-echo "Recipient: $RECIPIENT_SSH"
-# Show recipient address
+cat ~/.ssh/id_ed25519.pub
+# Display SSH public key on screen
 
-echo "Recipient Public Key: ${RECIPIENT_PUBKEY:0:20}..."
-# Show first part of public key
-
-# 1. Generate checksum of original file
-CHECKSUM=$(sha256sum "$FILE" | awk '{print $1}')
-# Create checksum for file (used to verify data)
-
-echo "Original checksum: sha256:$CHECKSUM"
-# Display checksum
-
-# 2. Encrypt with recipient's public key (age)
-echo "Encrypting file with recipient's public key..."
-# Show message
-
-age -r "$RECIPIENT_PUBKEY" -o "$ENCRYPTED" "$FILE"
-# Encrypt file using recipient's public key
-
-echo "Encrypted as: $ENCRYPTED"
-# Show encrypted file name
-
-# 3. Transfer encrypted file via scp (SSH key authentication)
-echo "Transferring encrypted file via SSH..."
-# Show message
-
-if scp "$ENCRYPTED" "$RECIPIENT_SSH:~/"; then
-# Send file using SCP
-
-    STATUS="SUCCESS"
-    # Mark as success
-
-    echo "Transfer successful."
-    # Show success message
-
-else
-    STATUS="FAILED (transfer error)"
-    # Mark as failed
-
-    echo "ERROR: Transfer failed!" >&2
-    # Show error message
-fi
-
-# 4. Log the operation
-echo "$TIMESTAMP | $(whoami) | $RECIPIENT_SSH | $FILE | sha256:$CHECKSUM | $STATUS" >> "$LOGFILE"
-# Save details in log file
-
-echo "Operation logged."
-# Show message
-
-# Cleanup: remove encrypted file after transfer
-rm -f "$ENCRYPTED"
-# Delete encrypted file from local system
-
-echo "=== Done ==="
-# Show completion message
-
-echo "Recipient should now decrypt and verify using the checksum."
-# Tell recipient to decrypt and verify file
-
-
-
-
-4. Receiver Script (receive.sh)
-
-
-
-#!/bin/bash
-# This tells the system to run the script using bash
-
-# receive.sh - Decrypt and verify received file
-# This script decrypts a file and checks if it is correct
-
-set -euo pipefail
-# Stop the script if:
-# - any error occurs (-e)
-# - any variable is missing (-u)
-# - any command in a pipe fails (pipefail)
-
-usage() {
-    echo "Usage: ./receive.sh <encrypted-file.age>"
-    # Shows how to use the script
-
-    echo "Example: ./receive.sh notes.txt.age"
-    # Shows an example
-
-    exit 1
-    # Exit if used incorrectly
-}
-
-if [ $# -ne 1 ]; then
-# Check if exactly 1 argument is given
-
-    usage
-    # If not, show usage message
-fi
-
-ENCRYPTED="$1"
-# Input: encrypted file name
-
-DECRYPTED="${ENCRYPTED%.age}"
-# Remove .age extension to get original file name
-
-if [ ! -f "$ENCRYPTED" ]; then
-# Check if the file exists
-
-    echo "ERROR: Encrypted file '$ENCRYPTED' not found!" >&2
-    # Show error message
-
-    exit 1
-    # Stop the script
-fi
-
-echo "=== Secure File Sharing - Receiver ==="
-# Print heading
-
-# 1. Decrypt using private key
-echo "Decrypting with your private age key..."
-# Show message
-
-if age -d -i ~/.config/age/identity.txt -o "$DECRYPTED" "$ENCRYPTED"; then
-# Decrypt file using your private key
-
-    echo "Decryption successful: $DECRYPTED"
-    # Show success message
-
-else
-    echo "ERROR: Decryption failed! (Wrong key or corrupted file?)" >&2
-    # Show error message
-
-    exit 1
-    # Stop the script
-fi
-
-# 2. Verify checksum
 echo ""
-# Print empty line
+# Empty line
 
-echo "IMPORTANT: Ask sender for the original SHA256 checksum."
-# Tell user to get checksum from sender
+echo "Age public key (for encrypting files to you):"
+# Label for age public key
 
-read -rp "Enter original checksum (sha256:xxxx... or just the hash): " ORIGINAL_CHECKSUM
-# Take checksum input from user
+age-keygen -y ~/.age_key
+# Generate and show public key from private age key
 
-if [[ "$ORIGINAL_CHECKSUM" == sha256:* ]]; then
-# Check if input starts with sha256:
+echo ""
+# Empty line
 
-    ORIGINAL_CHECKSUM="${ORIGINAL_CHECKSUM#sha256:}"
-    # Remove sha256: part
-fi
+echo "=== Instructions ==="
+# Print instructions heading
 
-CURRENT_CHECKSUM=$(sha256sum "$DECRYPTED" | awk '{print $1}')
-# Generate checksum of decrypted file
+echo "1. Give your age public key to anyone who wants to send you encrypted files."
+# Share age public key with others
 
-if [ "$CURRENT_CHECKSUM" = "$ORIGINAL_CHECKSUM" ]; then
-# Compare both checksums
+echo "2. To allow remote login, ask admin to add your SSH public key to ~/.ssh/authorized_keys."
+# For login access, admin must add your SSH public key
 
-    echo " INTEGRITY CHECK PASSED! File matches original."
-    # File is correct
-
-    echo "File is safe to use."
-    # Safe to use
-
-else
-    echo " INTEGRITY CHECK FAILED!"
-    # File is not matching
-
-    echo "Expected: $ORIGINAL_CHECKSUM"
-    # Expected checksum
-
-    echo "Got:      $CURRENT_CHECKSUM"
-    # Actual checksum
-
-    echo "WARNING: File may have been changed or damaged during transfer!"
-    # Warning message
-fi
-
-echo "=== Done ==="
-# Show completion message
-
-
-5. .gitignore
-
-
-*.age
-# Ignore all files that end with .age (these are encrypted files)
-
-transfer.log
-# Ignore the log file that stores transfer details
-
-test-data/*.age
-# Ignore all .age files inside the test-data folder
-
-**/.ssh/id_ed25519*
-# Ignore all SSH private/public key files (very important for security)
-
-**/.config/age/identity.txt
-# Ignore the age private key file (keep it secret)
+echo "3. Keep ~/.age_key and ~/.ssh/id_ed25519 private – never share them."
+# Never share private keys, keep them safe
 
 
 
