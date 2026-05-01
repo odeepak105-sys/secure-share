@@ -1,0 +1,38 @@
+# Private keys
+# These are secret files → never share or upload
+
+~/.age_key
+# Your age private key (used for decryption) → keep safe
+
+~/.ssh/id_ed25519
+# Your SSH private key → used for login → keep private
+
+*.key
+# Ignore all files ending with .key (usually private keys)
+
+*.pem
+# Ignore all .pem files (often contain private keys or certificates)
+
+
+# Encrypted files (optional, but avoid committing test data)
+# These are encrypted files → not needed in repository
+
+*.age
+# Ignore all encrypted files (.age format)
+
+
+# Logs (if you want to keep local but not commit)
+# Log files store history → keep locally only
+
+transfer.log
+# Ignore transfer log file (records send/receive activity)
+
+
+# Test files
+# Temporary or testing files → not needed in final project
+
+test_*
+# Ignore all files starting with "test_"
+
+*.tmp
+# Ignore temporary files (.tmp)
