@@ -12,22 +12,16 @@
 
 *.pem
 # Ignore all .pem files (often contain private keys or certificates)
-
-
 # Encrypted files (optional, but avoid committing test data)
 # These are encrypted files → not needed in repository
 
 *.age
 # Ignore all encrypted files (.age format)
-
-
 # Logs (if you want to keep local but not commit)
 # Log files store history → keep locally only
 
 transfer.log
 # Ignore transfer log file (records send/receive activity)
-
-
 # Test files
 # Temporary or testing files → not needed in final project
 
